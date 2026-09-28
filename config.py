@@ -17,6 +17,7 @@ class Settings:
     database: str
     driver: str
     trust_certificate: str
+    encrypt: str = "yes"
 
     @classmethod
     def load(cls, *, require_token=True, require_admin=True):
@@ -39,13 +40,21 @@ class Settings:
         trust = os.getenv("SQL_TRUST_SERVER_CERTIFICATE", "no").strip().lower()
         if trust not in {"yes", "no"}:
             raise ValueError("SQL_TRUST_SERVER_CERTIFICATE must be yes or no.")
+        server = os.getenv("SQL_SERVER", r"(localdb)\MSSQLLocalDB").strip()
+        # LocalDB uses a local connection that may not support transport encryption.
+        # Keep encryption enabled by default for other SQL Server connections.
+        default_encrypt = "no" if server.lower().startswith("(localdb)\\") else "yes"
+        encrypt = os.getenv("SQL_ENCRYPT", default_encrypt).strip().lower()
+        if encrypt not in {"yes", "no"}:
+            raise ValueError("SQL_ENCRYPT must be yes or no.")
         return cls(
             token=token,
             admin_ids=admins,
-            server=os.getenv("SQL_SERVER", r"(localdb)\MSSQLLocalDB"),
+            server=server,
             database=os.getenv("SQL_DATABASE", "TelegramUploader"),
             driver=os.getenv("SQL_DRIVER", "ODBC Driver 18 for SQL Server"),
             trust_certificate=trust,
+            encrypt=encrypt,
         )
 
     def connection_string(self):
@@ -56,5 +65,5 @@ class Settings:
         return (
             f"DRIVER={quote(self.driver)};SERVER={quote(self.server)};"
             f"DATABASE={quote(self.database)};Trusted_Connection=yes;"
-            f"Encrypt=yes;TrustServerCertificate={self.trust_certificate};"
+            f"Encrypt={self.encrypt};TrustServerCertificate={self.trust_certificate};"
         )
